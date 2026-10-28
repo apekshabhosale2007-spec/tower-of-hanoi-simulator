@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tower of Hanoi - Visual Simulator</title>
+<style>
+  :root{
+    --bg:#1e2233; --panel:#262b40; --line:#3a4060; --fg:#e8ecf4; --muted:#9aa4c4;
+    --accent:#ffd166; --ok:#06d6a0; --err:#ef476f; --rod:#8d99c9; --ground:#4a5173;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}
+  .wrap{max-width:980px;margin:0 auto;padding:14px 16px 28px}
+  h1{margin:6px 0 2px;font-size:1.5rem;text-align:center;letter-spacing:.5px}
+  .sub{text-align:center;color:var(--muted);margin:0 0 14px;font-size:.9rem}
+
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+            background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+  .controls label{font-size:.9rem;color:var(--muted)}
+  select,button,input[type=range]{font:inherit}
+  select{background:var(--bg);color:var(--fg);border:1px solid var(--line);
+         border-radius:8px;padding:7px 8px}
+  button{background:#3a4272;color:var(--fg);border:0;border-radius:8px;
+         padding:8px 13px;cursor:pointer;font-weight:600}
+  button:hover:not(:disabled){background:#4b55909e}
+  button.primary{background:#118ab2}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .speed{display:flex;align-items:center;gap:6px;margin-left:auto}
+  input[type=range]{width:110px;accent-color:#ffd166}
+
+  .stats{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+        padding:8px 12px;font-weight:700;font-size:.95rem}
+  .stat.min{color:var(--accent)}
+
+  .stagebox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 10px 6px}
+  #stage{position:relative;height:300px;overflow:hidden}
+  .ground{position:absolute;left:3%;right:3%;height:10px;background:var(--ground);border-radius:5px}
+  .rod{position:absolute;width:8px;background:var(--rod);border-radius:4px 4px 0 0}
+  .disk{position:absolute;border-radius:7px;color:#111;font-weight:800;text-align:center;
+        font-size:.8rem;border:1px solid rgba(255,255,255,.75);z-index:1;
+        transition-property:left,top;transition-timing-function:ease-in-out;transition-duration:.3s}
+  #stage.noanim .disk{transition:none !important}
+  .labels{display:grid;grid-template-columns:repeat(3,1fr);text-align:center;
+          font-weight:700;font-size:.9rem;padding-top:4px}
+  .labels small{display:block;color:var(--muted);font-weight:500}
+
+  #status{margin:12px 0 4px;min-height:1.4em;font-weight:600;color:var(--muted)}
+  #status.move{color:var(--accent)} #status.ok{color:var(--ok)} #status.err{color:var(--err)}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+  @media(max-width:700px){
+    .grid{grid-template-columns:1fr}
+    .speed{margin-left:0;width:100%}
+    #stage{height:260px}
+  }
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+  .card h3{margin:2px 0 8px;font-size:1rem}
+  .rules{margin:0;padding-left:18px;color:var(--muted);font-size:.9rem;line-height:1.5}
+  #log{margin:0;padding-left:0;list-style:none;max-height:170px;overflow:auto;
+       font-family:Consolas,ui-monospace,monospace;font-size:.85rem;line-height:1.55}
+  #log li{border-bottom:1px solid #2f3552;padding:1px 0}
+  #log:empty::before{content:"No moves yet.";color:var(--muted)}
+  footer{text-align:center;color:var(--muted);font-size:.8rem;margin-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>TOWER OF HANOI</h1>
+  <p class="sub">Interactive recursive puzzle visualizer</p>
+
+  <div class="controls">
+    <label for="n">Number of disks:</label>
+    <select id="n"></select>
+    <button id="btnReset">Reset</button>
+    <button id="btnPlay" class="primary">▶ Start</button>
+    <button id="btnPrev">⏮ Previous</button>
+    <button id="btnNext">Next ⏭</button>
+    <div class="speed"><label for="speed">Speed</label>
+      <input id="speed" type="range" min="1" max="10" value="5"></div>
+  </div>
+
+  <div class="stats">
+    <div class="stat min" id="statMin"></div>
+    <div class="stat" id="statMoves"></div>
+  </div>
+
+  <div class="stagebox">
+    <div id="stage">
+      <div class="ground" id="ground"></div>
+      <div class="rod"></div><div class="rod"></div><div class="rod"></div>
+    </div>
+    <div class="labels">
+      <div>Rod A<small>Source</small></div>
+      <div>Rod B<small>Auxiliary</small></div>
+      <div>Rod C<small>Destination</small></div>
+    </div>
+  </div>
+
+  <div id="status"></div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Rules</h3>
+      <ol class="rules">
+        <li>Move only one disk at a time.</li>
+        <li>Only the top disk of a rod can be moved.</li>
+        <li>A larger disk can never sit on a smaller disk.</li>
+      </ol>
+      <p class="rules" style="margin-top:10px">Minimum moves for <b>n</b> disks = <b>2<sup>n</sup> − 1</b></p>
+    </div>
+    <div class="card">
+      <h3>Move history</h3>
+      <ol id="log"></ol>
+    </div>
+  </div>
+  <footer>Tower of Hanoi Visual Simulator</footer>
+</div>
+
+<script>
+(function(){
+  const COLORS=["#ef476f","#f78c6b","#ffd166","#06d6a0","#118ab2","#7b61ff","#c77dff","#e76f51","#2a9d8f","#8ab17d"];
+  const NAMES=["A","B","C"];
+  const $=id=>document.getElementById(id);
+  const stage=$("stage"), ground=$("ground"), sel=$("n"), logEl=$("log"), statusEl=$("status");
+  const btnPlay=$("btnPlay"), btnNext=$("btnNext"), btnPrev=$("btnPrev");
+
+  let n=4, rods=[[],[],[]], moves=[], idx=0;
+  let playing=false, busy=false, runId=0;
+  let diskEls={};
+
+  for(let i=1;i<=10;i++){ const o=document.createElement("option"); o.value=i; o.textContent=i; sel.appendChild(o); }
+  sel.value=4;
+
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  const segDur=()=>Math.max(60, 520-45*Number($("speed").value));
+  const gapDur=()=>Math.max(30, 260-22*Number($("speed").value));
+  const minMoves=k=>Math.pow(2,k)-1;
+
+  function solve(k,s,d,a){
+    if(k===0) return;
+    solve(k-1,s,a,d);
+    moves.push([k,s,d]);
+    solve(k-1,a,d,s);
+  }
+
+  function geom(){
+    const W=stage.clientWidth, H=stage.clientHeight, sp=W/3;
+    return {
+      W,H,
+      rodX:[sp*0.5, sp*1.5, sp*2.5],
+      maxW:sp*0.92,
+      minW:Math.max(28, sp*0.22),
+      h:Math.max(12, Math.min(26,(H-70)/n)),
+      base:H-14
+    };
+  }
+  const diskW=(g,size)=> n===1 ? g.maxW : g.minW+(size-1)*(g.maxW-g.minW)/(n-1);
+
+  function layout(){
+    const g=geom();
+    stage.classList.add("noanim");
+    stage.querySelectorAll(".rod").forEach((r,i)=>{
+      r.style.left=(g.rodX[i]-4)+"px"; r.style.top="36px"; r.style.height=(g.base-36)+"px";
+    });
+    ground.style.top=g.base+"px";
+    for(let r=0;r<3;r++){
+      rods[r].forEach((size,level)=>{
+        const el=diskEls[size], w=diskW(g,size);
+        el.style.width=w+"px"; el.style.height=(g.h-2)+"px"; el.style.lineHeight=(g.h-4)+"px";
+        el.style.left=(g.rodX[r]-w/2)+"px";
+        el.style.top=(g.base-(level+1)*g.h)+"px";
+      });
+    }
+    void stage.offsetWidth;
+    stage.classList.remove("noanim");
+  }
+
+  function buildDisks(){
+    stage.querySelectorAll(".disk").forEach(d=>d.remove());
+    diskEls={};
+    for(let s=1;s<=n;s++){
+      const el=document.createElement("div");
+      el.className="disk"; el.textContent=s;
+      el.style.background=COLORS[(s-1)%COLORS.length];
+      stage.appendChild(el); diskEls[s]=el;
+    }
+  }
+
+  function setStatus(text,cls){ statusEl.textContent=text; statusEl.className=cls||""; }
+
+  function updateStats(){
+    $("statMin").textContent="Minimum moves: 2^"+n+" − 1 = "+minMoves(n);
+    $("statMoves").textContent="Moves: "+idx+" / "+moves.length;
+  }
+
+  function updateButtons(){
+    const done=idx>=moves.length;
+    btnPlay.textContent = playing ? "⏸ Pause" : (idx>0 && !done ? "▶ Resume" : "▶ Start");
+    btnPlay.disabled = done && !playing;
+    btnNext.disabled = playing || busy || done;
+    btnPrev.disabled = playing || busy || idx===0;
+    sel.disabled = playing || busy;
+  }
+
+  function addLog(i,disk,src,dst){
+    const li=document.createElement("li");
+    li.textContent="Move "+String(i).padStart(3," ")+": disk "+disk+"  "+NAMES[src]+" → "+NAMES[dst];
+    logEl.appendChild(li); logEl.scrollTop=logEl.scrollHeight;
+  }
+
+  function reset(){
+    runId++; playing=false; busy=false;
+    n=Number(sel.value);
+    rods=[Array.from({length:n},(_,i)=>n-i),[],[]];
+    moves=[]; solve(n,0,2,1); idx=0;
+    logEl.innerHTML="";
+    buildDisks(); layout(); updateStats();
+    setStatus("Ready. Press Start or Next to begin.");
+    updateButtons();
+  }
+
+  async function animateMove(disk,src,dst,id){
+    const g=geom(), el=diskEls[disk], w=diskW(g,disk), dur=segDur();
+    el.style.transitionDuration=dur+"ms";
+    el.style.zIndex=5;
+    el.style.top="8px";                              await sleep(dur+25); if(id!==runId) return false;
+    el.style.left=(g.rodX[dst]-w/2)+"px";            await sleep(dur+25); if(id!==runId) return false;
+    const level=rods[dst].length;
+    el.style.top=(g.base-(level+1)*g.h)+"px";        await sleep(dur+25); if(id!==runId) return false;
+    el.style.zIndex=1;
+    return true;
+  }
+
+  async function doMove(){
+    if(idx>=moves.length) return false;
+    const [disk,src,dst]=moves[idx], id=runId;
+    // rule checks
+    const from=rods[src], to=rods[dst];
+    if(!from.length || from[from.length-1]!==disk){
+      setStatus("Illegal move: disk "+disk+" is not on top of rod "+NAMES[src]+".","err"); playing=false; return false;
+    }
+    if(to.length && to[to.length-1]<disk){
+      setStatus("Illegal move: cannot put disk "+disk+" on smaller disk "+to[to.length-1]+".","err"); playing=false; return false;
+    }
+    busy=true; updateButtons();
+    setStatus("Move "+(idx+1)+": disk "+disk+" from "+NAMES[src]+" → "+NAMES[dst],"move");
+    const ok=await animateMove(disk,src,dst,id);
+    if(id===runId) busy=false;
+    if(!ok) return false;
+    from.pop(); to.push(disk); idx++;
+    addLog(idx,disk,src,dst); updateStats();
+    if(idx===moves.length){
+      playing=false;
+      setStatus("✔ Solved in "+idx+" moves (minimum possible = "+minMoves(n)+").","ok");
+    }
+    updateButtons();
+    return true;
+  }
+
+  async function play(){
+    if(playing){ playing=false; updateButtons(); return; }
+    if(busy || idx>=moves.length) return;
+    playing=true; updateButtons();
+    const id=runId;
+    while(playing && idx<moves.length && id===runId){
+      const ok=await doMove();
+      if(!ok || id!==runId) break;
+      if(playing) await sleep(gapDur());
+    }
+    if(id===runId){ playing=false; updateButtons(); }
+  }
+
+  async function next(){
+    if(playing || busy) return;
+    await doMove(); updateButtons();
+  }
+
+  function prev(){
+    if(playing || busy || idx===0) return;
+    const [disk,src,dst]=moves[idx-1];
+    rods[dst].pop(); rods[src].push(disk); idx--;
+    if(logEl.lastElementChild) logEl.lastElementChild.remove();
+    layout(); updateStats();
+    setStatus("Went back to step "+idx+".");
+    updateButtons();
+  }
+
+  btnPlay.addEventListener("click",play);
+  btnNext.addEventListener("click",next);
+  btnPrev.addEventListener("click",prev);
+  $("btnReset").addEventListener("click",reset);
+  sel.addEventListener("change",reset);
+  window.addEventListener("resize",()=>{ if(!busy) layout(); });
+
+  reset();
+})();
+</script>
+</body>
+</html>
